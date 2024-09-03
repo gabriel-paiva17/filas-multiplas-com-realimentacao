@@ -1,5 +1,6 @@
 from collections import deque
 import time
+import threading
 
 def timing_decorator(func):
     def wrapper(*args, **kwargs):
@@ -23,9 +24,17 @@ class MultiLevelFeedbackQueue:
     def __init__(self, num_queues, quantums):
         self.queues = [deque() for _ in range(num_queues)]
         self.quantums = quantums
+        self.semaphore = threading.Semaphore(1)  # Semáforo com valor inicial 1
 
     def add_process(self, process):
-        self.queues[0].append(process)
+        for i in range(len(self.queues)):
+            if len(self.queues[i]) < 3:  # Verifica se a fila tem menos de 3 processos
+                self.queues[i].append(process)
+                print(f"Process {process.pid} added to Queue {i + 1}")
+                return
+        # Se todas as filas estiverem cheias (teoricamente não deveria acontecer se você tem filas suficientes)
+        self.queues[-1].append(process)
+        print(f"All queues full, process {process.pid} added to last Queue {len(self.queues)}")
 
     def print_queues(self):
         print("\n\n")
@@ -43,6 +52,10 @@ class MultiLevelFeedbackQueue:
 
                     process = queue.popleft()
 
+                    # OCUPA SEMÁFORO
+                    self.semaphore.acquire()
+
+                    # EXECUTA PROCESSO
                     execution_time = min(self.quantums[i], process.remaining_time)
 
                     print(f"Executing {process} from Queue {i + 1}/ Remaining time: {process.remaining_time}")
@@ -51,6 +64,9 @@ class MultiLevelFeedbackQueue:
 
                     time.sleep(execution_time)
                     
+                    # LIBERA SEMÁFORO
+                    self.semaphore.release()
+
                     if process.remaining_time > 0:
 
                         print(f"Quantum expired for {process}. Remaining time: {process.remaining_time}")
